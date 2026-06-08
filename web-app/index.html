@@ -16,122 +16,127 @@
         <aside class="map-panel">
             <p class="map-title" id="map-title">DAY 1 MAP</p>
             <div class="map-area">
-                <!-- Map nodes and hiker are generated and positioned by JS -->
+                <!-- Map nodes and hiker character are generated and positioned by JS -->
                 <div class="map-character" id="map-character">🚶</div>
             </div>
         </aside>
 
+        <!-- Centre: main game content -->
         <main class="game-container">
 
-        <header class="game-header">
-            <div>
-                <p class="eyebrow">HIKING SURVIVAL</p>
-                <h1>High-Altitude Challenge</h1>
-            </div>
-            <p id="game-message">Welcome to the mountains! Plan your route.</p>
-        </header>
-
-        <!-- Scene Card: current location as a large visual card -->
-        <section class="scene-card">
-            <div class="scene-image" id="scene-image"></div>
-            <div class="scene-overlay">
-                <span class="terrain-badge" id="terrain-badge">START</span>
-                <h2 id="scene-name">Base Camp</h2>
-                <p id="route-progress">Day 1 · Station 1 / 25</p>
-            </div>
-        </section>
-
-        <!-- Stats + Actions side by side -->
-        <div class="mid-row">
-            <section class="stats-panel">
-                <div class="stat-row" id="stamina-card">
-                    <div class="stat-meta">
-                        <span class="stat-icon">⚡</span>
-                        <span class="stat-label">STAMINA</span>
-                        <span class="stat-val" id="stamina-val">100%</span>
-                    </div>
-                    <div class="stat-track">
-                        <div class="stat-fill stamina" id="stamina-fill" style="width:100%"></div>
-                    </div>
+            <header class="game-header">
+                <div>
+                    <p class="eyebrow">HIKING SURVIVAL</p>
+                    <h1>High-Altitude Challenge</h1>
                 </div>
-                <div class="stat-row" id="hunger-card">
-                    <div class="stat-meta">
-                        <span class="stat-icon">🍖</span>
-                        <span class="stat-label">HUNGER</span>
-                        <span class="stat-val" id="hunger-val">100%</span>
-                    </div>
-                    <div class="stat-track">
-                        <div class="stat-fill hunger" id="hunger-fill" style="width:100%"></div>
-                    </div>
-                </div>
-                <div class="stat-row" id="warmth-card">
-                    <div class="stat-meta">
-                        <span class="stat-icon">🔥</span>
-                        <span class="stat-label">WARMTH</span>
-                        <span class="stat-val" id="warmth-val">100%</span>
-                    </div>
-                    <div class="stat-track">
-                        <div class="stat-fill warmth" id="warmth-fill" style="width:100%"></div>
-                    </div>
+                <p id="game-message">Welcome to the mountains! Plan your route.</p>
+            </header>
+
+            <!-- Scene Card: current location as a large visual card -->
+            <section class="scene-card">
+                <div class="scene-image" id="scene-image"></div>
+                <div class="scene-overlay">
+                    <span class="terrain-badge" id="terrain-badge">START</span>
+                    <h2 id="scene-name">Base Camp</h2>
+                    <p id="route-progress">Day 1 · Station 1 / 25</p>
                 </div>
             </section>
 
-            <section class="actions-panel">
-                <button id="btn-move" class="action-btn primary">
-                    <span class="btn-icon">🚶</span>
-                    <div class="btn-text">
-                        <strong>Move Forward</strong>
-                        <small>-5 Stamina · -4 Hunger · -4 Warmth</small>
+            <!-- Stats + Move/Camp Actions side by side -->
+            <div class="mid-row">
+                <section class="stats-panel">
+                    <div class="stat-row" id="stamina-card">
+                        <div class="stat-meta">
+                            <span class="stat-icon">⚡</span>
+                            <span class="stat-label">STAMINA</span>
+                            <span class="stat-val" id="stamina-val">100%</span>
+                        </div>
+                        <div class="stat-track">
+                            <div class="stat-fill stamina" id="stamina-fill" style="width:100%"></div>
+                        </div>
                     </div>
-                </button>
-                <button id="btn-camp" class="action-btn secondary">
-                    <span class="btn-icon">⛺</span>
-                    <div class="btn-text">
-                        <strong>Camp &amp; Rest</strong>
-                        <small>+30 Stamina · +20 Warmth · -15 Hunger</small>
+                    <div class="stat-row" id="hunger-card">
+                        <div class="stat-meta">
+                            <span class="stat-icon">🍖</span>
+                            <span class="stat-label">HUNGER</span>
+                            <span class="stat-val" id="hunger-val">100%</span>
+                        </div>
+                        <div class="stat-track">
+                            <div class="stat-fill hunger" id="hunger-fill" style="width:100%"></div>
+                        </div>
                     </div>
-                </button>
-                <button id="btn-restart" class="action-btn restart">
+                    <div class="stat-row" id="warmth-card">
+                        <div class="stat-meta">
+                            <span class="stat-icon">🔥</span>
+                            <span class="stat-label">WARMTH</span>
+                            <span class="stat-val" id="warmth-val">100%</span>
+                        </div>
+                        <div class="stat-track">
+                            <div class="stat-fill warmth" id="warmth-fill" style="width:100%"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="actions-panel">
+                    <button id="btn-move" class="action-btn primary">
+                        <span class="btn-icon">🚶</span>
+                        <div class="btn-text">
+                            <strong>Move Forward</strong>
+                            <small>-5 Stamina · -4 Hunger · -4 Warmth</small>
+                        </div>
+                    </button>
+                    <button id="btn-camp" class="action-btn secondary">
+                        <span class="btn-icon">⛺</span>
+                        <div class="btn-text">
+                            <strong>Camp &amp; Rest</strong>
+                            <small>+30 Stamina · +20 Warmth · -15 Hunger</small>
+                        </div>
+                    </button>
+                </section>
+            </div>
+
+            <!-- Restart bar — full-width rectangle, separated to prevent accidental taps -->
+            <div class="restart-bar">
+                <button id="btn-restart" class="restart-btn">
                     <span class="btn-icon">🔄</span>
-                    <div class="btn-text">
-                        <strong>Restart</strong>
-                        <small>Reset route, stats, and inventory</small>
+                    <div>
+                        <strong>RESTART EXPEDITION</strong>
+                        <small>Reset all stats, route, and inventory</small>
                     </div>
                 </button>
+            </div>
+
+            <!-- Trail board: connected node path like a board game -->
+            <section class="trail-section">
+                <h3 class="section-label">EXPEDITION BOARD</h3>
+                <div id="trail-board" class="trail-board"></div>
             </section>
-        </div>
 
-        <!-- Trail board: connected node path like a board game -->
-        <section class="trail-section">
-            <h3 class="section-label">EXPEDITION BOARD</h3>
-            <div id="trail-board" class="trail-board"></div>
-        </section>
-
-        <!-- Inventory -->
-        <section class="inventory-section">
-            <h3 class="section-label">GEAR &amp; INVENTORY</h3>
-            <div id="inventory-list" class="item-grid"></div>
-        </section>
-
-        <!-- Event log -->
-        <section class="log-section">
-            <div class="log-header">
-                <h3 class="section-label">EXPEDITION LOG</h3>
-                <div class="log-header-right">
-                    <div class="log-progress-bar">
-                        <span id="log-progress-fill"></span>
+            <!-- Event log -->
+            <section class="log-section">
+                <div class="log-header">
+                    <h3 class="section-label">EXPEDITION LOG</h3>
+                    <div class="log-header-right">
+                        <div class="log-progress-bar">
+                            <span id="log-progress-fill"></span>
+                        </div>
+                        <span id="log-count">1 log</span>
                     </div>
-                    <span id="log-count">1 log</span>
                 </div>
-            </div>
-            <div class="log-scroll">
-                <ul id="event-log">
-                    <li>A new challenge begins. Good luck.</li>
-                </ul>
-            </div>
-        </section>
+                <div class="log-scroll">
+                    <ul id="event-log">
+                        <li>A new challenge begins. Good luck.</li>
+                    </ul>
+                </div>
+            </section>
 
         </main>
+
+        <!-- Right: Gear & Inventory panel -->
+        <aside class="inventory-panel">
+            <p class="panel-title">GEAR &amp; INVENTORY</p>
+            <div id="inventory-list" class="item-grid"></div>
+        </aside>
 
     </div><!-- .layout-wrapper -->
 
