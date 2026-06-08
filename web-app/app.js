@@ -448,6 +448,35 @@ function renderMap() {
 }
 
 /**
+ * Switch the hiker image based on the lowest critical stat
+ * Priority: cold → weak stamina → hungry → normal
+ */
+function updateHikerImage() {
+    const img = document.getElementById("hiker-img");
+    if (!img) return;
+    const { stamina, hunger, warmth } = currentState.player;
+
+    let src;
+    if (warmth <= 30) {
+        src = "images/coldhiker.png";
+    } else if (stamina <= 30) {
+        src = "images/weakhiker.png";
+    } else if (hunger <= 30) {
+        src = "images/hungryhiker.png";
+    } else {
+        src = "images/normalhiker.png";
+    }
+
+    if (img.src !== src) {
+        img.style.opacity = "0";
+        setTimeout(function () {
+            img.src = src;
+            img.style.opacity = "1";
+        }, 150);
+    }
+}
+
+/**
  * Refresh all UI elements centrally
  */
 function updateUI() {
@@ -456,6 +485,7 @@ function updateUI() {
     renderBoard();
     updateLogProgress();
     renderMap();
+    updateHikerImage();
 }
 
 // ==================== 3. Bind Player Action Events ====================
