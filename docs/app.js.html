@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>app.js - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-app.html">app</a><ul class='methods'><li data-type='method'><a href="module-app.html#~applyCampAndRest">applyCampAndRest</a></li><li data-type='method'><a href="module-app.html#~applyMoveForward">applyMoveForward</a></li><li data-type='method'><a href="module-app.html#~applyUseItem">applyUseItem</a></li><li data-type='method'><a href="module-app.html#~handleStatusChange">handleStatusChange</a></li></ul></li><li><a href="module-game.html">game</a><ul class='members'><li data-type='member'><a href="module-game.html#.initialState">initialState</a></li><li data-type='member'><a href="module-game.html#.terrainLabels">terrainLabels</a></li><li data-type='member'><a href="module-game.html#~surpriseEvents">surpriseEvents</a></li><li data-type='member'><a href="module-game.html#~terrainEffects">terrainEffects</a></li><li data-type='member'><a href="module-game.html#~terrainPenaltyLabels">terrainPenaltyLabels</a></li></ul><ul class='methods'><li data-type='method'><a href="module-game.html#.campAndRest">campAndRest</a></li><li data-type='method'><a href="module-game.html#.checkStatus">checkStatus</a></li><li data-type='method'><a href="module-game.html#.clampStat">clampStat</a></li><li data-type='method'><a href="module-game.html#.dangerDrain">dangerDrain</a></li><li data-type='method'><a href="module-game.html#.formatCostLine">formatCostLine</a></li><li data-type='method'><a href="module-game.html#.getCurrentCell">getCurrentCell</a></li><li data-type='method'><a href="module-game.html#.getNewGame">getNewGame</a></li><li data-type='method'><a href="module-game.html#.getNextCell">getNextCell</a></li><li data-type='method'><a href="module-game.html#.hasRestedHere">hasRestedHere</a></li><li data-type='method'><a href="module-game.html#.isAtCamp">isAtCamp</a></li><li data-type='method'><a href="module-game.html#.isIcyCell">isIcyCell</a></li><li data-type='method'><a href="module-game.html#.moveForward">moveForward</a></li><li data-type='method'><a href="module-game.html#.useItem">useItem</a></li><li data-type='method'><a href="module-game.html#~applyTerrainEffect">applyTerrainEffect</a></li><li data-type='method'><a href="module-game.html#~getStatName">getStatName</a></li></ul></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">app.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module app
+ * @description
+ * Hiking Survival — UI layer.
+ *
+ * This module is responsible solely for rendering the current game state and
+ * wiring DOM events.  All game rules live in game.js; this file must not
+ * re-implement any game logic.
+ */
+
+import {
+    getNewGame,
+    terrainLabels,
+    moveForward,
+    campAndRest,
+    useItem,
+    dangerDrain,
+    isAtCamp,
+    hasRestedHere,
+    getCurrentCell,
+    checkStatus
+} from "./game.js";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let currentState = getNewGame();
+
+// ── Audio System ──────────────────────────────────────────────────────────────
+
+let audioCtx = null;
+let heartbeatTimer = null;
+
+function getAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+}
+
+function playClick() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(500, t);
+        osc.frequency.exponentialRampToValueAtTime(180, t + 0.07);
+        gain.gain.setValueAtTime(0.10, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.12);
+    } catch (e) {}
+}
+
+function playEat() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+        const sr = ctx.sampleRate;
+        const len = Math.floor(sr * 0.22);
+        const buf = ctx.createBuffer(1, len, sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i &lt; len; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.03));
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 3000;
+        filter.Q.value = 1.8;
+        const gain = ctx.createGain();
+        gain.gain.value = 0.50;
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(t);
+    } catch (e) {}
+}
+
+function playEquip() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+        [380, 580].forEach(function (freq, i) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.value = freq;
+            const start = t + i * 0.09;
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.22);
+        });
+    } catch (e) {}
+}
+
+function playHeartbeatSound() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+
+        function thud(start, freq, vol) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(freq, start);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.32, start + 0.24);
+            g.gain.setValueAtTime(vol, start);
+            g.gain.exponentialRampToValueAtTime(0.001, start + 0.30);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.35);
+        }
+
+        thud(t,        90, 0.55);
+        thud(t + 0.25, 72, 0.38);
+    } catch (e) {}
+}
+
+// Short icy-wind drain sound for danger-zone ticks
+function playDangerDrain() {
+    try {
+        const ctx = getAudio();
+        const t   = ctx.currentTime;
+        const sr  = ctx.sampleRate;
+
+        // Brief white-noise burst shaped like a gust of wind
+        const len  = Math.floor(sr * 0.18);
+        const buf  = ctx.createBuffer(1, len, sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i &lt; len; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.05));
+        }
+        const src    = ctx.createBufferSource();
+        src.buffer   = buf;
+
+        const filter       = ctx.createBiquadFilter();
+        filter.type        = "highpass";
+        filter.frequency.value = 900;
+
+        // Descending pitch sweep underneath the noise
+        const osc  = ctx.createOscillator();
+        const gOsc = ctx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(260, t);
+        osc.frequency.exponentialRampToValueAtTime(60, t + 0.18);
+        gOsc.gain.setValueAtTime(0.06, t);
+        gOsc.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+        osc.connect(gOsc);
+        gOsc.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.22);
+
+        const gNoise = ctx.createGain();
+        gNoise.gain.value = 0.12;
+        src.connect(filter);
+        filter.connect(gNoise);
+        gNoise.connect(ctx.destination);
+        src.start(t);
+    } catch (e) {}
+}
+
+function startHeartbeat() {
+    if (heartbeatTimer) return;
+    playHeartbeatSound();
+    heartbeatTimer = setInterval(playHeartbeatSound, 1200);
+}
+
+function stopHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
+// ── Danger Zone Timer ─────────────────────────────────────────────────────────
+
+let dangerTimer = null;
+
+function tickDanger() {
+    const result = dangerDrain(currentState);
+    if (result.state === currentState) return; // no-op (not on danger / not playing)
+
+    currentState = result.state;
+    playDangerDrain();
+
+    // Light stat-only refresh — avoids re-rendering the whole board every second
+    renderStats();
+    updateVignette();
+    updateHikerImage();
+
+    if (currentState.status !== "playing") {
+        handleStatusChange();
+        updateUI();
+        stopDangerTimer();
+    }
+}
+
+function startDangerTimer() {
+    if (dangerTimer) return;
+    dangerTimer = setInterval(tickDanger, 1000);
+}
+
+function stopDangerTimer() {
+    if (dangerTimer) {
+        clearInterval(dangerTimer);
+        dangerTimer = null;
+    }
+}
+
+function updateDangerZone() {
+    const cell = getCurrentCell(currentState);
+    if (currentState.status === "playing" &amp;&amp; cell.type === "danger") {
+        startDangerTimer();
+    } else {
+        stopDangerTimer();
+    }
+}
+
+// ── Speech Complaints ─────────────────────────────────────────────────────────
+
+const speechCooldowns = { warmth: 0, hunger: 0, stamina: 0 };
+const SPEECH_COOLDOWN = 10000;
+
+const complaints = {
+    warmth:  ["I'm freezing! I can't feel my fingers!", "So cold... I need shelter now!", "Hypothermia is setting in... must keep moving!", "My whole body is shaking from the cold!"],
+    hunger:  ["I'm starving! I need food right now!", "My stomach is completely empty...", "Can't think straight, I'm so hungry!", "I haven't eaten enough. My body is shutting down."],
+    stamina: ["I can't take another step...", "Completely exhausted. I have to rest!", "My legs are giving out on me!", "I'm running on empty. Need to stop!"]
+};
+
+function checkComplaints() {
+    if (currentState.status !== "playing") return;
+    const now = Date.now();
+    const { stamina, hunger, warmth } = currentState.player;
+
+    if (warmth &lt;= 30 &amp;&amp; now - speechCooldowns.warmth > SPEECH_COOLDOWN) {
+        speechCooldowns.warmth = now;
+        speakComplaint("warmth");
+    } else if (stamina &lt;= 30 &amp;&amp; now - speechCooldowns.stamina > SPEECH_COOLDOWN) {
+        speechCooldowns.stamina = now;
+        speakComplaint("stamina");
+    } else if (hunger &lt;= 30 &amp;&amp; now - speechCooldowns.hunger > SPEECH_COOLDOWN) {
+        speechCooldowns.hunger = now;
+        speakComplaint("hunger");
+    }
+}
+
+function speakComplaint(type) {
+    try {
+        if (!window.speechSynthesis) return;
+        const phrases = complaints[type];
+        const text = phrases[Math.floor(Math.random() * phrases.length)];
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.volume = 0.95;
+        if (type === "warmth")        { u.rate = 0.80; u.pitch = 1.30; }
+        else if (type === "stamina")  { u.rate = 0.70; u.pitch = 0.80; }
+        else                          { u.rate = 0.85; u.pitch = 0.85; }
+        window.speechSynthesis.speak(u);
+    } catch (e) {}
+}
+
+// ── Vignette ──────────────────────────────────────────────────────────────────
+
+function updateVignette() {
+    const overlay = document.getElementById("vignette-overlay");
+    if (!overlay) return;
+
+    const { stamina, hunger, warmth } = currentState.player;
+    const isLow = (warmth &lt;= 30 || stamina &lt;= 30 || hunger &lt;= 30) &amp;&amp; currentState.status === "playing";
+
+    if (!isLow) {
+        overlay.className = "vignette-overlay";
+        stopHeartbeat();
+        return;
+    }
+
+    if (warmth &lt;= 30) {
+        overlay.className = "vignette-overlay active cold";
+    } else if (stamina &lt;= 30) {
+        overlay.className = "vignette-overlay active tired";
+    } else {
+        overlay.className = "vignette-overlay active hungry";
+    }
+
+    startHeartbeat();
+    checkComplaints();
+}
+
+// ── Render Functions ──────────────────────────────────────────────────────────
+
+function renderStats() {
+    ["stamina", "hunger", "warmth"].forEach(function (statName) {
+        const value = currentState.player[statName];
+        const fill = document.getElementById(statName + "-fill");
+        if (fill) fill.style.width = value + "%";
+        document.getElementById(statName + "-val").textContent = value + "%";
+        document.getElementById(statName + "-card").classList.toggle("is-low", value &lt;= 30);
+    });
+    const currentCell = currentState.trail[currentState.player.position];
+    document.getElementById("route-progress").textContent =
+        "Day " + currentCell.day + " · Station " + (currentState.player.position + 1) + " / " + currentState.trail.length;
+}
+
+function renderInventory() {
+    const container = document.getElementById("inventory-list");
+    container.innerHTML = "";
+
+    if (currentState.inventory.length === 0) {
+        const p = document.createElement("p");
+        p.className = "empty-inventory";
+        p.textContent = "Backpack empty. Every step must be calculated.";
+        container.appendChild(p);
+        clearItemInfoStrip();
+        return;
+    }
+
+    currentState.inventory.forEach(function (item, index) {
+        const btn = document.createElement("button");
+        btn.className = "inventory-item";
+
+        const parts = item.name.split(" ");
+        const emoji = parts[0];
+        const label = parts.slice(1).join(" ");
+
+        if (item.image) {
+            const imgEl = document.createElement("img");
+            imgEl.src = item.image;
+            imgEl.alt = label;
+            imgEl.className = "item-img";
+            btn.appendChild(imgEl);
+        } else {
+            const emojiEl = document.createElement("span");
+            emojiEl.className = "item-emoji";
+            emojiEl.textContent = emoji;
+            btn.appendChild(emojiEl);
+        }
+
+        const nameEl = document.createElement("span");
+        nameEl.className = "item-name";
+        nameEl.textContent = label;
+        btn.appendChild(nameEl);
+
+        btn.onclick = function () {
+            playClick();
+            applyUseItem(index);
+        };
+
+        btn.addEventListener("mouseenter", function () { showItemInfoStrip(item); });
+        btn.addEventListener("mouseleave", clearItemInfoStrip);
+
+        container.appendChild(btn);
+    });
+}
+
+function showItemInfoStrip(item) {
+    const strip = document.getElementById("item-info-strip");
+    if (!strip) return;
+    const parts = item.name.split(" ");
+    const emoji = parts[0];
+    const label = parts.slice(1).join(" ");
+
+    let effectText, effectClass;
+    if (item.type === "gear") {
+        effectText = "EQUIP · Reduces Stamina drain on icy terrain";
+        effectClass = "gear";
+    } else if (item.type === "camp") {
+        effectText = "Use during Camp &amp; Rest";
+        effectClass = "camp";
+    } else {
+        const statName = { stamina: "Stamina", hunger: "Hunger", warmth: "Warmth" }[item.type];
+        effectText = "+" + item.value + " " + statName + " · One-time use";
+        effectClass = item.type;
+    }
+
+    strip.innerHTML =
+        "&lt;span class='item-info-name'>" + emoji + " " + label + "&lt;/span>" +
+        "&lt;span class='item-info-effect " + effectClass + "'>" + effectText + "&lt;/span>";
+}
+
+function clearItemInfoStrip() {
+    const strip = document.getElementById("item-info-strip");
+    if (strip) strip.innerHTML = "&lt;span class='item-info-hint'>Hover an item to see its effect&lt;/span>";
+}
+
+function renderBoard() {
+    const boardContainer = document.getElementById("trail-board");
+    const sceneName      = document.getElementById("scene-name");
+    const sceneImage     = document.getElementById("scene-image");
+    const badge          = document.getElementById("terrain-badge");
+    const currentCell    = currentState.trail[currentState.player.position];
+    boardContainer.innerHTML = "";
+
+    if (sceneName &amp;&amp; currentCell) sceneName.textContent = currentCell.name;
+
+    if (sceneImage &amp;&amp; currentCell &amp;&amp; currentCell.image) {
+        sceneImage.style.opacity = "0";
+        sceneImage.style.backgroundImage = "url('" + currentCell.image + "')";
+        requestAnimationFrame(function () { sceneImage.style.opacity = "1"; });
+    }
+
+    if (badge &amp;&amp; currentCell) {
+        badge.textContent = (terrainLabels[currentCell.type] || "Route").toUpperCase();
+        badge.className   = "terrain-badge " + currentCell.type;
+    }
+
+    const nextPos = currentState.player.position + 1;
+
+    currentState.trail.forEach(function (cell, index) {
+        if (index > 0) {
+            const connector = document.createElement("div");
+            connector.className = "trail-connector" + (currentState.player.position >= cell.id ? " visited" : "");
+            boardContainer.appendChild(connector);
+        }
+
+        const node = document.createElement("div");
+        node.title = cell.name;
+
+        if (currentState.player.position === cell.id) {
+            node.className = "trail-node " + cell.type + " current";
+            node.textContent = "🚶";
+        } else if (currentState.player.position > cell.id) {
+            node.className = "trail-node " + cell.type + " visited";
+            node.textContent = "✓";
+        } else {
+            const isNext = (cell.id === nextPos);
+            node.className = "trail-node " + cell.type + (isNext ? " next-node" : "");
+            node.textContent =
+                cell.type === "summit" ? "🚩" :
+                cell.type === "camp"   ? "⛺" :
+                cell.type === "start"  ? "🏠" :
+                String(cell.id + 1);
+        }
+
+        boardContainer.appendChild(node);
+    });
+
+    const currentNode = boardContainer.querySelector(".trail-node.current");
+    if (currentNode) {
+        requestAnimationFrame(function () {
+            currentNode.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        });
+    }
+
+    renderNextHint();
+}
+
+function renderNextHint() {
+    const nextPos  = currentState.player.position + 1;
+    const total    = currentState.trail.length;
+    const nameEl   = document.getElementById("next-hint-name");
+    const badgeEl  = document.getElementById("next-hint-badge");
+    const remainEl = document.getElementById("next-hint-remaining");
+
+    if (nextPos >= total) {
+        if (nameEl)   nameEl.textContent  = "You are at the Summit!";
+        if (badgeEl)  { badgeEl.textContent = ""; badgeEl.className = "next-hint-badge"; }
+        if (remainEl) remainEl.textContent = "";
+        return;
+    }
+
+    const nextCell  = currentState.trail[nextPos];
+    const remaining = total - currentState.player.position - 1;
+
+    if (nameEl)   nameEl.textContent = nextCell.name;
+    if (badgeEl)  {
+        badgeEl.textContent = (terrainLabels[nextCell.type] || "").toUpperCase();
+        badgeEl.className   = "next-hint-badge " + nextCell.type;
+    }
+    if (remainEl) remainEl.textContent = remaining + " left";
+}
+
+// ── Map Rendering ─────────────────────────────────────────────────────────────
+
+const mapDayPositions = {
+    1: [
+        { x: 50, y: 87 }, { x: 43, y: 73 }, { x: 20, y: 54 },
+        { x: 50, y: 40 }, { x: 75, y: 45 }, { x: 65, y: 18 }
+    ],
+    2: [
+        { x: 30, y: 85 }, { x: 60, y: 70 }, { x: 40, y: 55 },
+        { x: 65, y: 38 }, { x: 50, y: 20 }
+    ],
+    3: [
+        { x: 35, y: 82 }, { x: 55, y: 65 }, { x: 30, y: 48 },
+        { x: 65, y: 32 }, { x: 50, y: 16 }
+    ],
+    4: [
+        { x: 45, y: 83 }, { x: 65, y: 67 }, { x: 35, y: 52 },
+        { x: 60, y: 36 }, { x: 48, y: 18 }
+    ],
+    5: [
+        { x: 40, y: 80 }, { x: 62, y: 62 }, { x: 38, y: 45 },
+        { x: 58, y: 28 }, { x: 50, y: 12 }
+    ]
+};
+
+function renderMap() {
+    const character = document.getElementById("map-character");
+    const mapArea   = document.querySelector(".map-area");
+    const mapTitle  = document.getElementById("map-title");
+    if (!character || !mapArea) return;
+
+    const pos         = currentState.player.position;
+    const currentCell = currentState.trail[pos];
+    const currentDay  = currentCell.day;
+
+    mapArea.style.backgroundImage = "url('images/map-day" + currentDay + ".jpg')";
+    if (mapTitle) mapTitle.textContent = "DAY " + currentDay + " MAP";
+
+    mapArea.querySelectorAll(".map-node").forEach(function (dot) { dot.remove(); });
+
+    const dayPositions = mapDayPositions[currentDay];
+    if (!dayPositions) return;
+
+    const dayCells = currentState.trail.filter(function (c) { return c.day === currentDay; });
+
+    dayCells.forEach(function (cell, dayIndex) {
+        const mapPos = dayPositions[dayIndex];
+        if (!mapPos) return;
+        const dot = document.createElement("div");
+        dot.id = "map-dot-" + cell.id;
+        dot.className = "map-node " + cell.type;
+        dot.title = cell.name;
+        dot.style.left = mapPos.x + "%";
+        dot.style.top  = mapPos.y + "%";
+        dot.classList.toggle("visited", pos > cell.id);
+        dot.classList.toggle("current", pos === cell.id);
+        mapArea.insertBefore(dot, character);
+    });
+
+    const cellIndexInDay = dayCells.findIndex(function (c) { return c.id === pos; });
+    const safeIndex = cellIndexInDay >= 0
+        ? Math.min(cellIndexInDay, dayPositions.length - 1)
+        : dayPositions.length - 1;
+
+    character.style.left = dayPositions[safeIndex].x + "%";
+    character.style.top  = dayPositions[safeIndex].y + "%";
+}
+
+function updateHikerImage() {
+    const img = document.getElementById("hiker-img");
+    if (!img) return;
+    const { stamina, hunger, warmth } = currentState.player;
+    let src;
+    if (warmth &lt;= 30)       src = "images/coldhiker.png";
+    else if (stamina &lt;= 30) src = "images/weakhiker.png";
+    else if (hunger &lt;= 30)  src = "images/hungryhiker.png";
+    else                    src = "images/normalhiker.png";
+
+    if (!img.src.endsWith(src)) {
+        img.style.opacity = "0";
+        setTimeout(function () { img.src = src; img.style.opacity = "1"; }, 150);
+    }
+}
+
+function updateCampButton() {
+    const btn = document.getElementById("btn-camp");
+    if (!btn) return;
+    if (currentState.status !== "playing") return;
+
+    const atCamp  = isAtCamp(currentState);
+    const already = atCamp &amp;&amp; hasRestedHere(currentState);
+    btn.disabled  = !atCamp || already;
+
+    const small = btn.querySelector("small");
+    if (small) {
+        if (!atCamp)    small.textContent = "Only available at ⛺ Camp nodes";
+        else if (already) small.textContent = "Already rested here — move on";
+        else            small.textContent = "+30 Stamina · +20 Warmth · -15 Hunger";
+    }
+}
+
+// ── Log Helpers ───────────────────────────────────────────────────────────────
+
+function logEvent(message) {
+    const log = document.getElementById("event-log");
+    const li  = document.createElement("li");
+    li.textContent = message;
+    if (message.startsWith("  ↳")) li.classList.add("log-cost");
+    log.appendChild(li);
+    updateLogProgress();
+
+    const scroll = document.querySelector(".log-scroll");
+    if (scroll) {
+        requestAnimationFrame(function () { scroll.scrollTop = scroll.scrollHeight; });
+    }
+}
+
+function logEvents(eventArray) {
+    eventArray.forEach(logEvent);
+}
+
+function updateLogProgress() {
+    const logCount    = document.getElementById("log-count");
+    const progressFill = document.getElementById("log-progress-fill");
+    if (!logCount || !progressFill) return;
+    const items    = document.querySelectorAll("#event-log li");
+    const progress = (currentState.player.position / (currentState.trail.length - 1)) * 100;
+    logCount.textContent     = items.length + " logs";
+    progressFill.style.width = progress + "%";
+}
+
+function resetLog() {
+    document.getElementById("event-log").innerHTML = "&lt;li>A new challenge begins. Good luck.&lt;/li>";
+    updateLogProgress();
+}
+
+// ── Post-action helpers ───────────────────────────────────────────────────────
+
+/**
+ * Handle the game‑over and game‑won states that may result from an action.
+ * Reads `currentState.status` after it has already been updated by a pure
+ * game function and adjusts the UI accordingly.
+ */
+function handleStatusChange() {
+    if (currentState.status === "over") {
+        document.getElementById("game-message").textContent = "💀 The extreme environment has broken you. Expedition failed!";
+        document.getElementById("btn-move").disabled = true;
+        document.getElementById("btn-camp").disabled = true;
+        logEvent("❌ Your body has reached its absolute limit, collapsing in the snowstorm...");
+        stopHeartbeat();
+        stopDangerTimer();
+        stopMusicForGameEnd();
+        document.getElementById("vignette-overlay").className = "vignette-overlay";
+        showGameOverModal();
+    } else if (currentState.status === "won") {
+        document.getElementById("game-message").textContent = "🎉 Incredible! You have conquered the 5000m vertical wall!";
+        document.getElementById("btn-move").disabled = true;
+        document.getElementById("btn-camp").disabled = true;
+        logEvent("🏆 Victory! You stand atop the frozen summit, overlooking the world!");
+        stopHeartbeat();
+        stopDangerTimer();
+        document.getElementById("vignette-overlay").className = "vignette-overlay";
+        setTimeout(showSummitModal, 800);   // brief pause so the log message registers first
+    }
+}
+
+function updateUI() {
+    renderStats();
+    renderInventory();
+    renderBoard();
+    updateLogProgress();
+    renderMap();
+    updateHikerImage();
+    updateVignette();
+    updateCampButton();
+    updateDangerZone();
+}
+
+// ── Action dispatchers ────────────────────────────────────────────────────────
+
+/**
+ * Dispatch a Move Forward action: call the pure game function, apply the
+ * returned state, render all events to the log, and refresh the UI.
+ */
+function applyMoveForward() {
+    const result = moveForward(currentState);
+    currentState = result.state;
+    logEvents(result.events);
+    handleStatusChange();
+    updateUI();
+    updateMusic();
+}
+
+/**
+ * Dispatch a Camp &amp; Rest action.
+ */
+function applyCampAndRest() {
+    const result = campAndRest(currentState);
+    currentState = result.state;
+    logEvents(result.events);
+    handleStatusChange();
+    updateUI();
+}
+
+/**
+ * Dispatch a Use Item action for the inventory item at `index`.
+ * @param {number} index - Zero-based index into the current inventory.
+ */
+function applyUseItem(index) {
+    const item = currentState.inventory[index];
+    if (!item) return;
+
+    // Choose sound before state changes
+    if (item.type === "gear")  playEquip();
+    else if (item.type !== "camp") playEat();
+
+    const result = useItem(currentState, index);
+    currentState = result.state;
+    logEvents(result.events);
+    handleStatusChange();
+    updateUI();
+}
+
+function restartGame() {
+    currentState = getNewGame();
+    stopHeartbeat();
+    stopDangerTimer();
+    const go = document.getElementById("gameover-overlay");
+    if (go) go.style.display = "none";
+    stopConfetti();
+    const so = document.getElementById("summit-overlay");
+    if (so) so.style.display = "none";
+    window.speechSynthesis &amp;&amp; window.speechSynthesis.cancel();
+    document.getElementById("game-message").textContent = "Welcome back to the mountains! Plan your route.";
+    document.getElementById("btn-move").disabled = false;
+    document.getElementById("btn-camp").disabled = false;
+    resetLog();
+    currentTrackSrc = "";
+    updateUI();
+    updateMusic();
+}
+
+// ── Button bindings ───────────────────────────────────────────────────────────
+
+const btnMove = document.getElementById("btn-move");
+if (btnMove) {
+    btnMove.onclick = function () {
+        if (currentState.status !== "playing") return;
+        playClick();
+        applyMoveForward();
+    };
+}
+
+const btnCamp = document.getElementById("btn-camp");
+if (btnCamp) {
+    btnCamp.onclick = function () {
+        if (currentState.status !== "playing") return;
+        playClick();
+        applyCampAndRest();
+    };
+}
+
+const btnRestart = document.getElementById("btn-restart");
+if (btnRestart) {
+    btnRestart.onclick = function () {
+        playClick();
+        restartGame();
+    };
+}
+
+// ── Tutorial ──────────────────────────────────────────────────────────────────
+
+const tutorialOverlay = document.getElementById("tutorial-overlay");
+const tutorialClose   = document.getElementById("tutorial-close");
+
+if (tutorialClose) {
+    tutorialClose.onclick = function () {
+        playClick();
+        tutorialOverlay.style.display = "none";
+        localStorage.setItem("hiking_tutorial_shown", "1");
+    };
+}
+
+if (tutorialOverlay &amp;&amp; localStorage.getItem("hiking_tutorial_shown")) {
+    tutorialOverlay.style.display = "none";
+}
+
+const btnGuide = document.getElementById("btn-guide");
+if (btnGuide) {
+    btnGuide.onclick = function () {
+        playClick();
+        tutorialOverlay.style.display = "flex";
+    };
+}
+
+// ── Background Music ──────────────────────────────────────────────────────────
+
+const dayTracks = {
+    1: "assets/day1.mp3",
+    2: "assets/day2.mp3",
+    3: "assets/day3.mp3",
+    4: "assets/day4.mp3",
+    5: "assets/day4.mp3"
+};
+const summitTrack = "assets/summit.mp3";
+
+const bgMusic = new Audio();
+bgMusic.loop   = true;
+bgMusic.volume = 0.45;
+
+let currentTrackSrc = "";
+let musicMuted      = false;
+
+function getExpectedTrack() {
+    const cell = currentState.trail[currentState.player.position];
+    if (cell &amp;&amp; cell.type === "summit") return summitTrack;
+    const day = cell ? cell.day : 1;
+    return dayTracks[day] || dayTracks[1];
+}
+
+function updateMusic() {
+    const expected = getExpectedTrack();
+    if (expected === currentTrackSrc) return;
+
+    bgMusic.pause();
+    bgMusic.src = expected;
+    currentTrackSrc = expected;
+    bgMusic.currentTime = 0;
+
+    if (!musicMuted) {
+        bgMusic.play().catch(function () {});
+    }
+}
+
+function startMusicOnInteraction() {
+    if (!musicMuted &amp;&amp; bgMusic.paused &amp;&amp; currentTrackSrc) {
+        bgMusic.play().catch(function () {});
+    }
+}
+
+document.addEventListener("click", startMusicOnInteraction, { once: false });
+
+const btnMute = document.getElementById("btn-mute");
+if (btnMute) {
+    btnMute.onclick = function () {
+        musicMuted = !musicMuted;
+        if (musicMuted) {
+            bgMusic.pause();
+            btnMute.textContent = "🔇";
+            btnMute.classList.add("muted");
+        } else {
+            btnMute.textContent = "🔊";
+            btnMute.classList.remove("muted");
+            bgMusic.play().catch(function () {});
+        }
+    };
+}
+
+function stopMusicForGameEnd() {
+    bgMusic.pause();
+    currentTrackSrc = "";
+}
+
+// ── Summit / victory modal ────────────────────────────────────────────────────
+
+let confettiRaf = null;
+
+function startConfetti() {
+    const canvas = document.getElementById("summit-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const COLORS = ["#ffcc00", "#ff8c00", "#00cc44", "#00aaff", "#ff44aa", "#ffffff", "#ff2222"];
+    const pieces = Array.from({ length: 90 }, () => ({
+        x:        Math.random() * canvas.width,
+        y:        Math.random() * -canvas.height,
+        size:     Math.floor(Math.random() * 7) + 4,
+        color:    COLORS[Math.floor(Math.random() * COLORS.length)],
+        speed:    Math.random() * 2.5 + 0.8,
+        drift:    (Math.random() - 0.5) * 1.8,
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.12
+    }));
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pieces.forEach(function (p) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+            ctx.restore();
+            p.y        += p.speed;
+            p.x        += p.drift;
+            p.rotation += p.rotSpeed;
+            if (p.y > canvas.height + 10) {
+                p.y = -p.size;
+                p.x = Math.random() * canvas.width;
+            }
+        });
+        confettiRaf = requestAnimationFrame(draw);
+    }
+    draw();
+}
+
+function stopConfetti() {
+    if (confettiRaf) {
+        cancelAnimationFrame(confettiRaf);
+        confettiRaf = null;
+    }
+    const canvas = document.getElementById("summit-canvas");
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function showSummitModal() {
+    const overlay = document.getElementById("summit-overlay");
+    if (!overlay) return;
+
+    const steps    = currentState.player.position;
+    const itemsUsed = 14 - currentState.inventory.length;   // 14 = initial inventory count
+
+    document.getElementById("summit-steps").textContent   = steps + " / 25";
+    document.getElementById("summit-items").textContent   = itemsUsed;
+    document.getElementById("summit-stamina").textContent = currentState.player.stamina + "%";
+
+    overlay.style.display = "flex";
+    startConfetti();
+}
+
+const btnPlayAgain = document.getElementById("btn-play-again");
+if (btnPlayAgain) {
+    btnPlayAgain.onclick = function () {
+        playClick();
+        stopConfetti();
+        document.getElementById("summit-overlay").style.display = "none";
+        restartGame();
+    };
+}
+
+// ── Game-over modal ───────────────────────────────────────────────────────────
+
+function showGameOverModal() {
+    const overlay = document.getElementById("gameover-overlay");
+    const reason  = document.getElementById("gameover-reason");
+    if (!overlay) return;
+
+    const { stamina, hunger, warmth } = currentState.player;
+    if (stamina &lt;= 0)       reason.textContent = "Your exhausted body collapsed on the frozen slope.";
+    else if (hunger &lt;= 0)   reason.textContent = "Starvation claimed you before you reached the peak.";
+    else if (warmth &lt;= 0)   reason.textContent = "Hypothermia overcame you in the bitter cold.";
+    else                    reason.textContent = "The mountain took everything you had.";
+
+    overlay.style.display = "flex";
+}
+
+const btnRetry = document.getElementById("btn-retry");
+if (btnRetry) {
+    btnRetry.onclick = function () {
+        playClick();
+        document.getElementById("gameover-overlay").style.display = "none";
+        restartGame();
+    };
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+updateMusic();
+updateUI();
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Jun 23 2026 02:01:11 GMT+0100 (British Summer Time) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+    <link type="text/css" rel="stylesheet" href="custom.css">
+    
+</body>
+</html>

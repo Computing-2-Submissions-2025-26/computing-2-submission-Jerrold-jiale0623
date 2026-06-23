@@ -1,9 +1,12 @@
 {
   "type": "module",
   "scripts": {
-    "test": "mocha web-app/tests/*.test.js"
+    "test": "mocha web-app/tests/*.test.js",
+    "docs": "jsdoc -c jsdoc.json"
   },
   "devDependencies": {
+    "docdash": "^2.0.2",
+    "jsdoc": "^4.0.5",
     "mocha": "^10.4.0"
   },
   "dependencies": {
