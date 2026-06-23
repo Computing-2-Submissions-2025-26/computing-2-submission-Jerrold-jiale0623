@@ -1,199 +1,422 @@
-// 1. Import data from game.js
-import { getNewGame } from "./game.js";
+/**
+ * @module app
+ * @description
+ * Hiking Survival — UI layer.
+ *
+ * This module is responsible solely for rendering the current game state and
+ * wiring DOM events.  All game rules live in game.js; this file must not
+ * re-implement any game logic.
+ */
 
-// 2. Initialize game state
+import {
+    getNewGame,
+    terrainLabels,
+    moveForward,
+    campAndRest,
+    useItem,
+    dangerDrain,
+    isAtCamp,
+    hasRestedHere,
+    getCurrentCell,
+    checkStatus
+} from "./game.js";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
 let currentState = getNewGame();
 
-const terrainLabels = {
-    start: "Safe",
-    normal: "Normal",
-    hard: "Strenuous",
-    danger: "Danger",
-    camp: "Camp",
-    safe: "Shelter",
-    summit: "Summit"
-};
+// ── Audio System ──────────────────────────────────────────────────────────────
 
-const terrainEffects = {
-    normal: {
-        stamina: -1,
-        hunger: -1,
-        warmth: 0,
-        message: "🥾 The trail is decent, but the long trek still drains your condition."
-    },
-    hard: {
-        stamina: -5,
-        hunger: -2,
-        warmth: -1,
-        message: "🪨 The difficult terrain makes your steps heavy, costing extra stamina."
-    },
-    danger: {
-        stamina: -3,
-        hunger: -1,
-        warmth: -7,
-        message: "❄️ Severe weather suddenly hits, rapidly draining your body heat!"
-    },
-    camp: {
-        stamina: 12,
-        hunger: 6,
-        warmth: 12,
-        message: "⛺ You arrive at camp, hydrate, sort your gear, and recover some condition."
-    },
-    safe: {
-        stamina: 5,
-        hunger: 3,
-        warmth: 5,
-        message: "💧 This is a good spot for a brief rest. You recover slightly."
+let audioCtx = null;
+let heartbeatTimer = null;
+
+function getAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
-};
-
-const surpriseEvents = [
-    { message: "⚠️ Event: Your boot slips; you barely stabilize with your trekking pole.", stamina: -4, hunger: 0, warmth: -1 },
-    { message: "⚠️ Event: Your backpack strap loosens. Fixing it wastes precious energy.", stamina: -4, hunger: -1, warmth: 0 },
-    { message: "⚠️ Event: Freezing wind pierces your collar, dropping your warmth significantly.", stamina: 0, hunger: 0, warmth: -5 },
-    { message: "⚠️ Event: A detour to avoid dangerous terrain consumes extra supplies.", stamina: -2, hunger: -4, warmth: -1 },
-    { message: "⚠️ Event: The snow glare is blinding, forcing you to slow your pace.", stamina: -3, hunger: -2, warmth: 0 },
-    { message: "⚠️ Event: Whiteout conditions briefly obscure the trail; checking directions costs time.", stamina: -2, hunger: -2, warmth: -2 }
-];
-
-function getPoint(cell) {
-    return {
-        x: cell.x,
-        y: cell.y
-    };
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
 }
 
-function clampStat(value) {
-    return Math.max(0, Math.min(100, value));
+function playClick() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(500, t);
+        osc.frequency.exponentialRampToValueAtTime(180, t + 0.07);
+        gain.gain.setValueAtTime(0.10, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.12);
+    } catch (e) {}
 }
 
-function changeStat(statName, amount) {
-    currentState.player[statName] = clampStat(currentState.player[statName] + amount);
+function playEat() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+        const sr = ctx.sampleRate;
+        const len = Math.floor(sr * 0.22);
+        const buf = ctx.createBuffer(1, len, sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.03));
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 3000;
+        filter.Q.value = 1.8;
+        const gain = ctx.createGain();
+        gain.gain.value = 0.50;
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(t);
+    } catch (e) {}
 }
 
-function isIcyCell(cell) {
-    // Checking for English keywords like Ice, Snow, Cold, Frozen
-    const nameStr = cell.name.toLowerCase();
-    return nameStr.includes("ice") || nameStr.includes("icy") || nameStr.includes("snow") || nameStr.includes("frozen");
+function playEquip() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
+        [380, 580].forEach(function (freq, i) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.value = freq;
+            const start = t + i * 0.09;
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.22);
+        });
+    } catch (e) {}
 }
 
-function applyTerrainEffect(cell) {
-    const effect = terrainEffects[cell.type];
+function playHeartbeatSound() {
+    try {
+        const ctx = getAudio();
+        const t = ctx.currentTime;
 
-    if (effect) {
-        let staminaChange = effect.stamina;
-        let warmthChange = effect.warmth;
-
-        if (isIcyCell(cell)) {
-            warmthChange -= 5;
-            logEvent("🧊 The freezing terrain drains your body heat even faster.");
+        function thud(start, freq, vol) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(freq, start);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.32, start + 0.24);
+            g.gain.setValueAtTime(vol, start);
+            g.gain.exponentialRampToValueAtTime(0.001, start + 0.30);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.35);
         }
 
-        if (currentState.player.gear.crampons && isIcyCell(cell)) {
-            staminaChange += 5;
-            logEvent("🥾 Your crampons grip the ice, saving you some stamina.");
-        }
+        thud(t,        90, 0.55);
+        thud(t + 0.25, 72, 0.38);
+    } catch (e) {}
+}
 
-        changeStat("stamina", staminaChange);
-        changeStat("hunger", effect.hunger);
-        changeStat("warmth", warmthChange);
-        logEvent(effect.message);
+// Short icy-wind drain sound for danger-zone ticks
+function playDangerDrain() {
+    try {
+        const ctx = getAudio();
+        const t   = ctx.currentTime;
+        const sr  = ctx.sampleRate;
+
+        // Brief white-noise burst shaped like a gust of wind
+        const len  = Math.floor(sr * 0.18);
+        const buf  = ctx.createBuffer(1, len, sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.05));
+        }
+        const src    = ctx.createBufferSource();
+        src.buffer   = buf;
+
+        const filter       = ctx.createBiquadFilter();
+        filter.type        = "highpass";
+        filter.frequency.value = 900;
+
+        // Descending pitch sweep underneath the noise
+        const osc  = ctx.createOscillator();
+        const gOsc = ctx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(260, t);
+        osc.frequency.exponentialRampToValueAtTime(60, t + 0.18);
+        gOsc.gain.setValueAtTime(0.06, t);
+        gOsc.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+        osc.connect(gOsc);
+        gOsc.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.22);
+
+        const gNoise = ctx.createGain();
+        gNoise.gain.value = 0.12;
+        src.connect(filter);
+        filter.connect(gNoise);
+        gNoise.connect(ctx.destination);
+        src.start(t);
+    } catch (e) {}
+}
+
+function startHeartbeat() {
+    if (heartbeatTimer) return;
+    playHeartbeatSound();
+    heartbeatTimer = setInterval(playHeartbeatSound, 1200);
+}
+
+function stopHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
     }
 }
 
-/**
- * Render status panel (dynamically update the three stat bars)
- */
+// ── Danger Zone Timer ─────────────────────────────────────────────────────────
+
+let dangerTimer = null;
+
+function tickDanger() {
+    const result = dangerDrain(currentState);
+    if (result.state === currentState) return; // no-op (not on danger / not playing)
+
+    currentState = result.state;
+    playDangerDrain();
+
+    // Light stat-only refresh — avoids re-rendering the whole board every second
+    renderStats();
+    updateVignette();
+    updateHikerImage();
+
+    if (currentState.status !== "playing") {
+        handleStatusChange();
+        updateUI();
+        stopDangerTimer();
+    }
+}
+
+function startDangerTimer() {
+    if (dangerTimer) return;
+    dangerTimer = setInterval(tickDanger, 1000);
+}
+
+function stopDangerTimer() {
+    if (dangerTimer) {
+        clearInterval(dangerTimer);
+        dangerTimer = null;
+    }
+}
+
+function updateDangerZone() {
+    const cell = getCurrentCell(currentState);
+    if (currentState.status === "playing" && cell.type === "danger") {
+        startDangerTimer();
+    } else {
+        stopDangerTimer();
+    }
+}
+
+// ── Speech Complaints ─────────────────────────────────────────────────────────
+
+const speechCooldowns = { warmth: 0, hunger: 0, stamina: 0 };
+const SPEECH_COOLDOWN = 10000;
+
+const complaints = {
+    warmth:  ["I'm freezing! I can't feel my fingers!", "So cold... I need shelter now!", "Hypothermia is setting in... must keep moving!", "My whole body is shaking from the cold!"],
+    hunger:  ["I'm starving! I need food right now!", "My stomach is completely empty...", "Can't think straight, I'm so hungry!", "I haven't eaten enough. My body is shutting down."],
+    stamina: ["I can't take another step...", "Completely exhausted. I have to rest!", "My legs are giving out on me!", "I'm running on empty. Need to stop!"]
+};
+
+function checkComplaints() {
+    if (currentState.status !== "playing") return;
+    const now = Date.now();
+    const { stamina, hunger, warmth } = currentState.player;
+
+    if (warmth <= 30 && now - speechCooldowns.warmth > SPEECH_COOLDOWN) {
+        speechCooldowns.warmth = now;
+        speakComplaint("warmth");
+    } else if (stamina <= 30 && now - speechCooldowns.stamina > SPEECH_COOLDOWN) {
+        speechCooldowns.stamina = now;
+        speakComplaint("stamina");
+    } else if (hunger <= 30 && now - speechCooldowns.hunger > SPEECH_COOLDOWN) {
+        speechCooldowns.hunger = now;
+        speakComplaint("hunger");
+    }
+}
+
+function speakComplaint(type) {
+    try {
+        if (!window.speechSynthesis) return;
+        const phrases = complaints[type];
+        const text = phrases[Math.floor(Math.random() * phrases.length)];
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.volume = 0.95;
+        if (type === "warmth")        { u.rate = 0.80; u.pitch = 1.30; }
+        else if (type === "stamina")  { u.rate = 0.70; u.pitch = 0.80; }
+        else                          { u.rate = 0.85; u.pitch = 0.85; }
+        window.speechSynthesis.speak(u);
+    } catch (e) {}
+}
+
+// ── Vignette ──────────────────────────────────────────────────────────────────
+
+function updateVignette() {
+    const overlay = document.getElementById("vignette-overlay");
+    if (!overlay) return;
+
+    const { stamina, hunger, warmth } = currentState.player;
+    const isLow = (warmth <= 30 || stamina <= 30 || hunger <= 30) && currentState.status === "playing";
+
+    if (!isLow) {
+        overlay.className = "vignette-overlay";
+        stopHeartbeat();
+        return;
+    }
+
+    if (warmth <= 30) {
+        overlay.className = "vignette-overlay active cold";
+    } else if (stamina <= 30) {
+        overlay.className = "vignette-overlay active tired";
+    } else {
+        overlay.className = "vignette-overlay active hungry";
+    }
+
+    startHeartbeat();
+    checkComplaints();
+}
+
+// ── Render Functions ──────────────────────────────────────────────────────────
+
 function renderStats() {
-    const stats = ["stamina", "hunger", "warmth"];
-
-    stats.forEach(function (statName) {
+    ["stamina", "hunger", "warmth"].forEach(function (statName) {
         const value = currentState.player[statName];
         const fill = document.getElementById(statName + "-fill");
-        if (fill) {
-            fill.style.width = value + "%";
-        }
+        if (fill) fill.style.width = value + "%";
         document.getElementById(statName + "-val").textContent = value + "%";
         document.getElementById(statName + "-card").classList.toggle("is-low", value <= 30);
     });
-
     const currentCell = currentState.trail[currentState.player.position];
     document.getElementById("route-progress").textContent =
         "Day " + currentCell.day + " · Station " + (currentState.player.position + 1) + " / " + currentState.trail.length;
 }
 
-/**
- * Render inventory items as RPG item slots (large emoji icon + small label)
- */
 function renderInventory() {
-    const inventoryContainer = document.getElementById("inventory-list");
-    inventoryContainer.innerHTML = "";
+    const container = document.getElementById("inventory-list");
+    container.innerHTML = "";
 
     if (currentState.inventory.length === 0) {
-        const emptyText = document.createElement("p");
-        emptyText.className = "empty-inventory";
-        emptyText.textContent = "Backpack empty. Every step must be calculated.";
-        inventoryContainer.appendChild(emptyText);
+        const p = document.createElement("p");
+        p.className = "empty-inventory";
+        p.textContent = "Backpack empty. Every step must be calculated.";
+        container.appendChild(p);
+        clearItemInfoStrip();
         return;
     }
 
     currentState.inventory.forEach(function (item, index) {
-        const itemButton = document.createElement("button");
-        itemButton.className = "inventory-item";
+        const btn = document.createElement("button");
+        btn.className = "inventory-item";
 
-        // Split "🍫 Energy Bar" → emoji icon (large) + name text (small)
         const parts = item.name.split(" ");
         const emoji = parts[0];
         const label = parts.slice(1).join(" ");
 
-        const emojiEl = document.createElement("span");
-        emojiEl.className = "item-emoji";
-        emojiEl.textContent = emoji;
+        if (item.image) {
+            const imgEl = document.createElement("img");
+            imgEl.src = item.image;
+            imgEl.alt = label;
+            imgEl.className = "item-img";
+            btn.appendChild(imgEl);
+        } else {
+            const emojiEl = document.createElement("span");
+            emojiEl.className = "item-emoji";
+            emojiEl.textContent = emoji;
+            btn.appendChild(emojiEl);
+        }
 
         const nameEl = document.createElement("span");
         nameEl.className = "item-name";
         nameEl.textContent = label;
+        btn.appendChild(nameEl);
 
-        itemButton.appendChild(emojiEl);
-        itemButton.appendChild(nameEl);
-        itemButton.onclick = function () {
-            useInventoryItem(index);
+        btn.onclick = function () {
+            playClick();
+            applyUseItem(index);
         };
 
-        inventoryContainer.appendChild(itemButton);
+        btn.addEventListener("mouseenter", function () { showItemInfoStrip(item); });
+        btn.addEventListener("mouseleave", clearItemInfoStrip);
+
+        container.appendChild(btn);
     });
 }
 
-/**
- * Render the trail board as connected nodes (board-game style)
- */
+function showItemInfoStrip(item) {
+    const strip = document.getElementById("item-info-strip");
+    if (!strip) return;
+    const parts = item.name.split(" ");
+    const emoji = parts[0];
+    const label = parts.slice(1).join(" ");
+
+    let effectText, effectClass;
+    if (item.type === "gear") {
+        effectText = "EQUIP · Reduces Stamina drain on icy terrain";
+        effectClass = "gear";
+    } else if (item.type === "camp") {
+        effectText = "Use during Camp & Rest";
+        effectClass = "camp";
+    } else {
+        const statName = { stamina: "Stamina", hunger: "Hunger", warmth: "Warmth" }[item.type];
+        effectText = "+" + item.value + " " + statName + " · One-time use";
+        effectClass = item.type;
+    }
+
+    strip.innerHTML =
+        "<span class='item-info-name'>" + emoji + " " + label + "</span>" +
+        "<span class='item-info-effect " + effectClass + "'>" + effectText + "</span>";
+}
+
+function clearItemInfoStrip() {
+    const strip = document.getElementById("item-info-strip");
+    if (strip) strip.innerHTML = "<span class='item-info-hint'>Hover an item to see its effect</span>";
+}
+
 function renderBoard() {
     const boardContainer = document.getElementById("trail-board");
-    const sceneName = document.getElementById("scene-name");
-    const sceneImage = document.getElementById("scene-image");
-    const badge = document.getElementById("terrain-badge");
-    const currentCell = currentState.trail[currentState.player.position];
+    const sceneName      = document.getElementById("scene-name");
+    const sceneImage     = document.getElementById("scene-image");
+    const badge          = document.getElementById("terrain-badge");
+    const currentCell    = currentState.trail[currentState.player.position];
     boardContainer.innerHTML = "";
 
-    if (sceneName && currentCell) {
-        sceneName.textContent = currentCell.name;
-    }
+    if (sceneName && currentCell) sceneName.textContent = currentCell.name;
 
     if (sceneImage && currentCell && currentCell.image) {
         sceneImage.style.opacity = "0";
         sceneImage.style.backgroundImage = "url('" + currentCell.image + "')";
-        requestAnimationFrame(function () {
-            sceneImage.style.opacity = "1";
-        });
+        requestAnimationFrame(function () { sceneImage.style.opacity = "1"; });
     }
 
     if (badge && currentCell) {
         badge.textContent = (terrainLabels[currentCell.type] || "Route").toUpperCase();
-        badge.className = "terrain-badge " + currentCell.type;
+        badge.className   = "terrain-badge " + currentCell.type;
     }
 
+    const nextPos = currentState.player.position + 1;
+
     currentState.trail.forEach(function (cell, index) {
-        // Connector line before each node (except the first)
         if (index > 0) {
             const connector = document.createElement("div");
             connector.className = "trail-connector" + (currentState.player.position >= cell.id ? " visited" : "");
@@ -210,220 +433,101 @@ function renderBoard() {
             node.className = "trail-node " + cell.type + " visited";
             node.textContent = "✓";
         } else {
-            node.className = "trail-node " + cell.type;
-            if (cell.type === "summit") {
-                node.textContent = "🚩";
-            } else if (cell.type === "camp") {
-                node.textContent = "⛺";
-            } else if (cell.type === "start") {
-                node.textContent = "🏠";
-            } else {
-                node.textContent = String(cell.id + 1);
-            }
+            const isNext = (cell.id === nextPos);
+            node.className = "trail-node " + cell.type + (isNext ? " next-node" : "");
+            node.textContent =
+                cell.type === "summit" ? "🚩" :
+                cell.type === "camp"   ? "⛺" :
+                cell.type === "start"  ? "🏠" :
+                String(cell.id + 1);
         }
 
         boardContainer.appendChild(node);
     });
 
-    // Scroll the board to keep the current node visible
     const currentNode = boardContainer.querySelector(".trail-node.current");
     if (currentNode) {
         requestAnimationFrame(function () {
             currentNode.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         });
     }
+
+    renderNextHint();
 }
 
-function useInventoryItem(index) {
-    if (currentState.status !== "playing") {
+function renderNextHint() {
+    const nextPos  = currentState.player.position + 1;
+    const total    = currentState.trail.length;
+    const nameEl   = document.getElementById("next-hint-name");
+    const badgeEl  = document.getElementById("next-hint-badge");
+    const remainEl = document.getElementById("next-hint-remaining");
+
+    if (nextPos >= total) {
+        if (nameEl)   nameEl.textContent  = "You are at the Summit!";
+        if (badgeEl)  { badgeEl.textContent = ""; badgeEl.className = "next-hint-badge"; }
+        if (remainEl) remainEl.textContent = "";
         return;
     }
 
-    const item = currentState.inventory[index];
+    const nextCell  = currentState.trail[nextPos];
+    const remaining = total - currentState.player.position - 1;
 
-    if (item.type === "camp") {
-        logEvent("⛺ Tents must be used during 'Camp & Rest'. Keep it in your pack for now.");
-        return;
+    if (nameEl)   nameEl.textContent = nextCell.name;
+    if (badgeEl)  {
+        badgeEl.textContent = (terrainLabels[nextCell.type] || "").toUpperCase();
+        badgeEl.className   = "next-hint-badge " + nextCell.type;
     }
-
-    if (item.type === "gear") {
-        currentState.player.gear[item.gear] = true;
-        currentState.inventory.splice(index, 1);
-        logEvent("🥾 You equipped [" + item.name + "]. Stamina drain on icy terrain will be reduced.");
-        updateUI();
-        return;
-    }
-
-    changeStat(item.type, item.value);
-    currentState.inventory.splice(index, 1);
-    logEvent("🎒 You consumed [" + item.name + "], restoring " + item.value + " " + getStatName(item.type) + ".");
-    checkGameStatus();
-    updateUI();
+    if (remainEl) remainEl.textContent = remaining + " left";
 }
 
-function getStatName(type) {
-    if (type === "stamina") {
-        return "Stamina";
-    }
+// ── Map Rendering ─────────────────────────────────────────────────────────────
 
-    if (type === "hunger") {
-        return "Hunger";
-    }
-
-    return "Warmth";
-}
-
-/**
- * Add a new record to the console log
- * @param {string} message - The message to broadcast
- */
-function logEvent(message) {
-    const logContainer = document.getElementById("event-log");
-    const li = document.createElement("li");
-    li.textContent = message;
-    logContainer.appendChild(li);
-    updateLogProgress();
-    
-    // Auto-scroll the log box to the bottom to see the latest message
-    const logScroll = document.querySelector(".log-scroll");
-    if (logScroll) {
-        requestAnimationFrame(function () {
-            logScroll.scrollTop = logScroll.scrollHeight;
-        });
-    }
-}
-
-function updateLogProgress() {
-    const logCount = document.getElementById("log-count");
-    const progressFill = document.getElementById("log-progress-fill");
-    if (!logCount || !progressFill) return;
-    
-    const logItems = document.querySelectorAll("#event-log li");
-    const journeyProgress = (currentState.player.position / (currentState.trail.length - 1)) * 100;
-
-    logCount.textContent = logItems.length + " logs";
-    progressFill.style.width = journeyProgress + "%";
-}
-
-function resetLog() {
-    const logContainer = document.getElementById("event-log");
-    logContainer.innerHTML = "<li>A new challenge begins. Good luck.</li>";
-    updateLogProgress();
-}
-
-function restartGame() {
-    currentState = getNewGame();
-    document.getElementById("game-message").textContent = "Welcome back to the mountains! Plan your route.";
-    document.getElementById("btn-move").disabled = false;
-    document.getElementById("btn-camp").disabled = false;
-    resetLog();
-    updateUI();
-}
-
-/**
- * Check if the game is over (win or lose)
- */
-function checkGameStatus() {
-    // Failure condition: Any stat drops to zero or below
-    if (currentState.player.stamina <= 0 || currentState.player.hunger <= 0 || currentState.player.warmth <= 0) {
-        currentState.status = "over";
-        document.getElementById("game-message").textContent = "💀 The extreme environment has broken you. Expedition failed!";
-        document.getElementById("btn-move").disabled = true;
-        document.getElementById("btn-camp").disabled = true;
-        logEvent("❌ Your body has reached its absolute limit, collapsing in the snowstorm...");
-    } 
-    // Victory condition: Reached the last node on the map
-    else if (currentState.player.position === currentState.trail.length - 1) {
-        currentState.status = "won";
-        document.getElementById("game-message").textContent = "🎉 Incredible! You have conquered the 5000m vertical wall!";
-        document.getElementById("btn-move").disabled = true;
-        document.getElementById("btn-camp").disabled = true;
-        logEvent("🏆 Victory! You stand atop the frozen summit, overlooking the world!");
-    }
-}
-
-// Node positions on each day's map image (percentage x/y), bottom = trail start, top = camp
 const mapDayPositions = {
     1: [
-        { x: 50, y: 87 },  // Base Camp
-        { x: 43, y: 73 },  // Fir Tree Trail
-        { x: 20, y: 54 },  // Broken Ice Bridge
-        { x: 50, y: 40 },  // Misty Fork
-        { x: 75, y: 45 },  // Slippery Boardwalk
-        { x: 65, y: 18 },  // Camp 1
+        { x: 50, y: 87 }, { x: 43, y: 73 }, { x: 20, y: 54 },
+        { x: 50, y: 40 }, { x: 75, y: 45 }, { x: 65, y: 18 }
     ],
     2: [
-        { x: 30, y: 85 },  // Scree Traverse
-        { x: 60, y: 70 },  // Whiteout Slopes
-        { x: 40, y: 55 },  // Icy Bottleneck
-        { x: 65, y: 38 },  // Windchill Exposure
-        { x: 50, y: 20 },  // Camp 2
+        { x: 30, y: 85 }, { x: 60, y: 70 }, { x: 40, y: 55 },
+        { x: 65, y: 38 }, { x: 50, y: 20 }
     ],
     3: [
-        { x: 35, y: 82 },  // Stormy Col
-        { x: 55, y: 65 },  // Fixed Rope Section
-        { x: 30, y: 48 },  // Frozen Tarn Edge
-        { x: 65, y: 32 },  // Heavy Night Snow
-        { x: 50, y: 16 },  // Camp 3
+        { x: 35, y: 82 }, { x: 55, y: 65 }, { x: 30, y: 48 },
+        { x: 65, y: 32 }, { x: 50, y: 16 }
     ],
     4: [
-        { x: 45, y: 83 },  // High-Altitude Snow Slope
-        { x: 65, y: 67 },  // Hypoxia Zone
-        { x: 35, y: 52 },  // Rockfall Couloir
-        { x: 60, y: 36 },  // Soaked Gloves
-        { x: 48, y: 18 },  // Camp 4
+        { x: 45, y: 83 }, { x: 65, y: 67 }, { x: 35, y: 52 },
+        { x: 60, y: 36 }, { x: 48, y: 18 }
     ],
     5: [
-        { x: 40, y: 80 },  // Summit Ridge Wind
-        { x: 62, y: 62 },  // Knife-edge Ice Ridge
-        { x: 38, y: 45 },  // Zero Visibility
-        { x: 58, y: 28 },  // The Final Wall
-        { x: 50, y: 12 },  // The Summit
-    ],
+        { x: 40, y: 80 }, { x: 62, y: 62 }, { x: 38, y: 45 },
+        { x: 58, y: 28 }, { x: 50, y: 12 }
+    ]
 };
 
-/**
- * Update the left map panel: switch map image, regenerate nodes, move hiker
- */
 function renderMap() {
     const character = document.getElementById("map-character");
-    const mapArea = document.querySelector(".map-area");
-    const mapTitle = document.getElementById("map-title");
-    if (!character || !mapArea) {
-        return;
-    }
+    const mapArea   = document.querySelector(".map-area");
+    const mapTitle  = document.getElementById("map-title");
+    if (!character || !mapArea) return;
 
-    const pos = currentState.player.position;
+    const pos         = currentState.player.position;
     const currentCell = currentState.trail[pos];
-    const currentDay = currentCell.day;
+    const currentDay  = currentCell.day;
 
-    // Switch background image and title for the current day
     mapArea.style.backgroundImage = "url('images/map-day" + currentDay + ".jpg')";
-    if (mapTitle) {
-        mapTitle.textContent = "DAY " + currentDay + " MAP";
-    }
+    if (mapTitle) mapTitle.textContent = "DAY " + currentDay + " MAP";
 
-    // Remove all previous map nodes (keep the character element)
-    mapArea.querySelectorAll(".map-node").forEach(function (dot) {
-        dot.remove();
-    });
+    mapArea.querySelectorAll(".map-node").forEach(function (dot) { dot.remove(); });
 
     const dayPositions = mapDayPositions[currentDay];
-    if (!dayPositions) {
-        return;
-    }
+    if (!dayPositions) return;
 
-    // Get the trail cells that belong to the current day
-    const dayCells = currentState.trail.filter(function (cell) {
-        return cell.day === currentDay;
-    });
+    const dayCells = currentState.trail.filter(function (c) { return c.day === currentDay; });
 
-    // Create a dot for each node of this day
     dayCells.forEach(function (cell, dayIndex) {
         const mapPos = dayPositions[dayIndex];
-        if (!mapPos) {
-            return;
-        }
+        if (!mapPos) return;
         const dot = document.createElement("div");
         dot.id = "map-dot-" + cell.id;
         dot.className = "map-node " + cell.type;
@@ -435,10 +539,7 @@ function renderMap() {
         mapArea.insertBefore(dot, character);
     });
 
-    // Move hiker to current node's position on this day's map
-    const cellIndexInDay = dayCells.findIndex(function (cell) {
-        return cell.id === pos;
-    });
+    const cellIndexInDay = dayCells.findIndex(function (c) { return c.id === pos; });
     const safeIndex = cellIndexInDay >= 0
         ? Math.min(cellIndexInDay, dayPositions.length - 1)
         : dayPositions.length - 1;
@@ -447,38 +548,104 @@ function renderMap() {
     character.style.top  = dayPositions[safeIndex].y + "%";
 }
 
-/**
- * Switch the hiker image based on the lowest critical stat
- * Priority: cold → weak stamina → hungry → normal
- */
 function updateHikerImage() {
     const img = document.getElementById("hiker-img");
     if (!img) return;
     const { stamina, hunger, warmth } = currentState.player;
-
     let src;
-    if (warmth <= 30) {
-        src = "images/coldhiker.png";
-    } else if (stamina <= 30) {
-        src = "images/weakhiker.png";
-    } else if (hunger <= 30) {
-        src = "images/hungryhiker.png";
-    } else {
-        src = "images/normalhiker.png";
-    }
+    if (warmth <= 30)       src = "images/coldhiker.png";
+    else if (stamina <= 30) src = "images/weakhiker.png";
+    else if (hunger <= 30)  src = "images/hungryhiker.png";
+    else                    src = "images/normalhiker.png";
 
-    if (img.src !== src) {
+    if (!img.src.endsWith(src)) {
         img.style.opacity = "0";
-        setTimeout(function () {
-            img.src = src;
-            img.style.opacity = "1";
-        }, 150);
+        setTimeout(function () { img.src = src; img.style.opacity = "1"; }, 150);
     }
 }
 
+function updateCampButton() {
+    const btn = document.getElementById("btn-camp");
+    if (!btn) return;
+    if (currentState.status !== "playing") return;
+
+    const atCamp  = isAtCamp(currentState);
+    const already = atCamp && hasRestedHere(currentState);
+    btn.disabled  = !atCamp || already;
+
+    const small = btn.querySelector("small");
+    if (small) {
+        if (!atCamp)    small.textContent = "Only available at ⛺ Camp nodes";
+        else if (already) small.textContent = "Already rested here — move on";
+        else            small.textContent = "+30 Stamina · +20 Warmth · -15 Hunger";
+    }
+}
+
+// ── Log Helpers ───────────────────────────────────────────────────────────────
+
+function logEvent(message) {
+    const log = document.getElementById("event-log");
+    const li  = document.createElement("li");
+    li.textContent = message;
+    if (message.startsWith("  ↳")) li.classList.add("log-cost");
+    log.appendChild(li);
+    updateLogProgress();
+
+    const scroll = document.querySelector(".log-scroll");
+    if (scroll) {
+        requestAnimationFrame(function () { scroll.scrollTop = scroll.scrollHeight; });
+    }
+}
+
+function logEvents(eventArray) {
+    eventArray.forEach(logEvent);
+}
+
+function updateLogProgress() {
+    const logCount    = document.getElementById("log-count");
+    const progressFill = document.getElementById("log-progress-fill");
+    if (!logCount || !progressFill) return;
+    const items    = document.querySelectorAll("#event-log li");
+    const progress = (currentState.player.position / (currentState.trail.length - 1)) * 100;
+    logCount.textContent     = items.length + " logs";
+    progressFill.style.width = progress + "%";
+}
+
+function resetLog() {
+    document.getElementById("event-log").innerHTML = "<li>A new challenge begins. Good luck.</li>";
+    updateLogProgress();
+}
+
+// ── Post-action helpers ───────────────────────────────────────────────────────
+
 /**
- * Refresh all UI elements centrally
+ * Handle the game‑over and game‑won states that may result from an action.
+ * Reads `currentState.status` after it has already been updated by a pure
+ * game function and adjusts the UI accordingly.
  */
+function handleStatusChange() {
+    if (currentState.status === "over") {
+        document.getElementById("game-message").textContent = "💀 The extreme environment has broken you. Expedition failed!";
+        document.getElementById("btn-move").disabled = true;
+        document.getElementById("btn-camp").disabled = true;
+        logEvent("❌ Your body has reached its absolute limit, collapsing in the snowstorm...");
+        stopHeartbeat();
+        stopDangerTimer();
+        stopMusicForGameEnd();
+        document.getElementById("vignette-overlay").className = "vignette-overlay";
+        showGameOverModal();
+    } else if (currentState.status === "won") {
+        document.getElementById("game-message").textContent = "🎉 Incredible! You have conquered the 5000m vertical wall!";
+        document.getElementById("btn-move").disabled = true;
+        document.getElementById("btn-camp").disabled = true;
+        logEvent("🏆 Victory! You stand atop the frozen summit, overlooking the world!");
+        stopHeartbeat();
+        stopDangerTimer();
+        document.getElementById("vignette-overlay").className = "vignette-overlay";
+        setTimeout(showSummitModal, 800);   // brief pause so the log message registers first
+    }
+}
+
 function updateUI() {
     renderStats();
     renderInventory();
@@ -486,73 +653,301 @@ function updateUI() {
     updateLogProgress();
     renderMap();
     updateHikerImage();
+    updateVignette();
+    updateCampButton();
+    updateDangerZone();
 }
 
-// ==================== 3. Bind Player Action Events ====================
+// ── Action dispatchers ────────────────────────────────────────────────────────
 
-// Click "Move Forward" button
+/**
+ * Dispatch a Move Forward action: call the pure game function, apply the
+ * returned state, render all events to the log, and refresh the UI.
+ */
+function applyMoveForward() {
+    const result = moveForward(currentState);
+    currentState = result.state;
+    logEvents(result.events);
+    handleStatusChange();
+    updateUI();
+    updateMusic();
+}
+
+/**
+ * Dispatch a Camp & Rest action.
+ */
+function applyCampAndRest() {
+    const result = campAndRest(currentState);
+    currentState = result.state;
+    logEvents(result.events);
+    handleStatusChange();
+    updateUI();
+}
+
+/**
+ * Dispatch a Use Item action for the inventory item at `index`.
+ * @param {number} index - Zero-based index into the current inventory.
+ */
+function applyUseItem(index) {
+    const item = currentState.inventory[index];
+    if (!item) return;
+
+    // Choose sound before state changes
+    if (item.type === "gear")  playEquip();
+    else if (item.type !== "camp") playEat();
+
+    const result = useItem(currentState, index);
+    currentState = result.state;
+    logEvents(result.events);
+    handleStatusChange();
+    updateUI();
+}
+
+function restartGame() {
+    currentState = getNewGame();
+    stopHeartbeat();
+    stopDangerTimer();
+    const go = document.getElementById("gameover-overlay");
+    if (go) go.style.display = "none";
+    stopConfetti();
+    const so = document.getElementById("summit-overlay");
+    if (so) so.style.display = "none";
+    window.speechSynthesis && window.speechSynthesis.cancel();
+    document.getElementById("game-message").textContent = "Welcome back to the mountains! Plan your route.";
+    document.getElementById("btn-move").disabled = false;
+    document.getElementById("btn-camp").disabled = false;
+    resetLog();
+    currentTrackSrc = "";
+    updateUI();
+    updateMusic();
+}
+
+// ── Button bindings ───────────────────────────────────────────────────────────
+
 const btnMove = document.getElementById("btn-move");
 if (btnMove) {
     btnMove.onclick = function () {
-        if (currentState.status !== "playing") {
-            return;
-        }
-
-        // Player moves forward one node
-        currentState.player.position += 1;
-
-        // Moving forward consumes survival stats
-        changeStat("stamina", -5);  // Base stamina cost for long-distance trekking
-        changeStat("hunger", -4);   // Every section drains hunger
-        changeStat("warmth", -4);   // The further from camp, the colder it gets
-
-        // Get current node info and broadcast
-        const currentCell = currentState.trail[currentState.player.position];
-        logEvent("🚶‍♂️ Pushing through the biting wind, you reach [" + currentCell.name + "].");
-
-        applyTerrainEffect(currentCell);
-
-        if (currentCell.type !== "camp" && currentCell.type !== "summit") {
-            const event = surpriseEvents[currentCell.id % surpriseEvents.length];
-            changeStat("stamina", event.stamina);
-            changeStat("hunger", event.hunger);
-            changeStat("warmth", event.warmth);
-            logEvent(event.message);
-        }
-
-        // Check status and refresh UI
-        checkGameStatus();
-        updateUI();
+        if (currentState.status !== "playing") return;
+        playClick();
+        applyMoveForward();
     };
 }
 
-// Click "Camp & Rest" button
 const btnCamp = document.getElementById("btn-camp");
 if (btnCamp) {
     btnCamp.onclick = function () {
-        if (currentState.status !== "playing") {
-            return;
-        }
-
-        // Camping restores stamina and warmth, but makes you hungrier
-        changeStat("stamina", 30);
-        changeStat("warmth", 20);
-        changeStat("hunger", -15); // Hunger drops faster while resting/healing
-
-        logEvent("⛺ You set up camp and rest. The campfire restores your warmth and stamina, but your stomach is completely empty.");
-
-        checkGameStatus();
-        updateUI();
+        if (currentState.status !== "playing") return;
+        playClick();
+        applyCampAndRest();
     };
 }
 
-// Click "Restart" button
 const btnRestart = document.getElementById("btn-restart");
 if (btnRestart) {
     btnRestart.onclick = function () {
+        playClick();
         restartGame();
     };
 }
 
-// 4. Initialize the display on first load
+// ── Tutorial ──────────────────────────────────────────────────────────────────
+
+const tutorialOverlay = document.getElementById("tutorial-overlay");
+const tutorialClose   = document.getElementById("tutorial-close");
+
+if (tutorialClose) {
+    tutorialClose.onclick = function () {
+        playClick();
+        tutorialOverlay.style.display = "none";
+        localStorage.setItem("hiking_tutorial_shown", "1");
+    };
+}
+
+if (tutorialOverlay && localStorage.getItem("hiking_tutorial_shown")) {
+    tutorialOverlay.style.display = "none";
+}
+
+const btnGuide = document.getElementById("btn-guide");
+if (btnGuide) {
+    btnGuide.onclick = function () {
+        playClick();
+        tutorialOverlay.style.display = "flex";
+    };
+}
+
+// ── Background Music ──────────────────────────────────────────────────────────
+
+const dayTracks = {
+    1: "assets/day1.mp3",
+    2: "assets/day2.mp3",
+    3: "assets/day3.mp3",
+    4: "assets/day4.mp3",
+    5: "assets/day4.mp3"
+};
+const summitTrack = "assets/summit.mp3";
+
+const bgMusic = new Audio();
+bgMusic.loop   = true;
+bgMusic.volume = 0.45;
+
+let currentTrackSrc = "";
+let musicMuted      = false;
+
+function getExpectedTrack() {
+    const cell = currentState.trail[currentState.player.position];
+    if (cell && cell.type === "summit") return summitTrack;
+    const day = cell ? cell.day : 1;
+    return dayTracks[day] || dayTracks[1];
+}
+
+function updateMusic() {
+    const expected = getExpectedTrack();
+    if (expected === currentTrackSrc) return;
+
+    bgMusic.pause();
+    bgMusic.src = expected;
+    currentTrackSrc = expected;
+    bgMusic.currentTime = 0;
+
+    if (!musicMuted) {
+        bgMusic.play().catch(function () {});
+    }
+}
+
+function startMusicOnInteraction() {
+    if (!musicMuted && bgMusic.paused && currentTrackSrc) {
+        bgMusic.play().catch(function () {});
+    }
+}
+
+document.addEventListener("click", startMusicOnInteraction, { once: false });
+
+const btnMute = document.getElementById("btn-mute");
+if (btnMute) {
+    btnMute.onclick = function () {
+        musicMuted = !musicMuted;
+        if (musicMuted) {
+            bgMusic.pause();
+            btnMute.textContent = "🔇";
+            btnMute.classList.add("muted");
+        } else {
+            btnMute.textContent = "🔊";
+            btnMute.classList.remove("muted");
+            bgMusic.play().catch(function () {});
+        }
+    };
+}
+
+function stopMusicForGameEnd() {
+    bgMusic.pause();
+    currentTrackSrc = "";
+}
+
+// ── Summit / victory modal ────────────────────────────────────────────────────
+
+let confettiRaf = null;
+
+function startConfetti() {
+    const canvas = document.getElementById("summit-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const COLORS = ["#ffcc00", "#ff8c00", "#00cc44", "#00aaff", "#ff44aa", "#ffffff", "#ff2222"];
+    const pieces = Array.from({ length: 90 }, () => ({
+        x:        Math.random() * canvas.width,
+        y:        Math.random() * -canvas.height,
+        size:     Math.floor(Math.random() * 7) + 4,
+        color:    COLORS[Math.floor(Math.random() * COLORS.length)],
+        speed:    Math.random() * 2.5 + 0.8,
+        drift:    (Math.random() - 0.5) * 1.8,
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.12
+    }));
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pieces.forEach(function (p) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rotation);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+            ctx.restore();
+            p.y        += p.speed;
+            p.x        += p.drift;
+            p.rotation += p.rotSpeed;
+            if (p.y > canvas.height + 10) {
+                p.y = -p.size;
+                p.x = Math.random() * canvas.width;
+            }
+        });
+        confettiRaf = requestAnimationFrame(draw);
+    }
+    draw();
+}
+
+function stopConfetti() {
+    if (confettiRaf) {
+        cancelAnimationFrame(confettiRaf);
+        confettiRaf = null;
+    }
+    const canvas = document.getElementById("summit-canvas");
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function showSummitModal() {
+    const overlay = document.getElementById("summit-overlay");
+    if (!overlay) return;
+
+    const steps    = currentState.player.position;
+    const itemsUsed = 14 - currentState.inventory.length;   // 14 = initial inventory count
+
+    document.getElementById("summit-steps").textContent   = steps + " / 25";
+    document.getElementById("summit-items").textContent   = itemsUsed;
+    document.getElementById("summit-stamina").textContent = currentState.player.stamina + "%";
+
+    overlay.style.display = "flex";
+    startConfetti();
+}
+
+const btnPlayAgain = document.getElementById("btn-play-again");
+if (btnPlayAgain) {
+    btnPlayAgain.onclick = function () {
+        playClick();
+        stopConfetti();
+        document.getElementById("summit-overlay").style.display = "none";
+        restartGame();
+    };
+}
+
+// ── Game-over modal ───────────────────────────────────────────────────────────
+
+function showGameOverModal() {
+    const overlay = document.getElementById("gameover-overlay");
+    const reason  = document.getElementById("gameover-reason");
+    if (!overlay) return;
+
+    const { stamina, hunger, warmth } = currentState.player;
+    if (stamina <= 0)       reason.textContent = "Your exhausted body collapsed on the frozen slope.";
+    else if (hunger <= 0)   reason.textContent = "Starvation claimed you before you reached the peak.";
+    else if (warmth <= 0)   reason.textContent = "Hypothermia overcame you in the bitter cold.";
+    else                    reason.textContent = "The mountain took everything you had.";
+
+    overlay.style.display = "flex";
+}
+
+const btnRetry = document.getElementById("btn-retry");
+if (btnRetry) {
+    btnRetry.onclick = function () {
+        playClick();
+        document.getElementById("gameover-overlay").style.display = "none";
+        restartGame();
+    };
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+updateMusic();
 updateUI();

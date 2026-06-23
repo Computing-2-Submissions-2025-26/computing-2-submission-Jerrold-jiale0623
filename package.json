@@ -1,4 +1,11 @@
 {
+  "type": "module",
+  "scripts": {
+    "test": "mocha web-app/tests/*.test.js"
+  },
+  "devDependencies": {
+    "mocha": "^10.4.0"
+  },
   "dependencies": {
     "jslint": "^0.12.1"
   }

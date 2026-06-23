@@ -33,13 +33,14 @@ npm install
 
 ### Game Module – API
 
-- [x] `web-app/game.js` — exports `initialState` and `getNewGame()`, documented with JSDoc
-- [x] `jsdoc.json` source updated
-- [x] Docs compiled with `Generate Docs`
+- [x] `web-app/game.js` — pure functions with full JSDoc (`@module`, `@typedef`, `@param`, `@returns`)
+- [x] `jsdoc.json` source updated to `web-app/game.js` and `web-app/app.js`
+- [x] Exported pure functions: `clampStat`, `isIcyCell`, `formatCostLine`, `checkStatus`, `isAtCamp`, `hasRestedHere`, `getCurrentCell`, `getNextCell`, `moveForward`, `campAndRest`, `useItem`, `dangerDrain`
 
 ### Game Module – Implementation
 
-- [x] `web-app/game.js` fully implemented — 26-node trail across 5 days, player stats, inventory
+- [x] `web-app/game.js` — all game logic as pure functions (input state → new state, no mutation)
+- [x] `web-app/app.js` — UI only; imports pure functions from `game.js`, no game logic
 
 ### Unit Tests – Specification
 
@@ -48,32 +49,56 @@ npm install
   - Player initial stats (position, stamina, hunger, warmth, gear)
   - Inventory completeness (all item types present, required fields)
   - Trail integrity (node count, sequential IDs, 5-day structure, camp nodes, valid types)
+  - `clampStat`, `isIcyCell`, `formatCostLine` utilities
+  - `checkStatus` — win / lose / playing conditions
+  - `getCurrentCell`, `getNextCell`, `isAtCamp`, `hasRestedHere` queries
+  - `moveForward` — stat drain, clamping, terrain effects, icy terrain, crampons, surprise events, camp arrival (no cost), win/lose, immutability
+  - `campAndRest` — recovery values, clamping, camp-only restriction, once-per-camp restriction, immutability
+  - `useItem` — all item types, stat clamping, item removal, gear equipping, camp items, immutability
 
 ### Unit Tests – Implementation
 
-- [x] 26 tests implemented and passing
+- [x] **102 tests** implemented and passing
 
 Run tests:
 ```bash
-npx mocha
+npm install
+npm test
 ```
 
-Expected output: **26 passing**
+Expected output: **102 passing**
 
 ### Web Application
 
-- [x] `web-app/index.html` — three-column layout: map | game | inventory
-- [x] `web-app/style.css` — pixel-art dark theme, responsive
-- [x] `web-app/app.js` — game loop, UI rendering, player actions
-- [x] `web-app/game.js` — pure game state module
-- [x] `web-app/images/` — trail photographs and day maps (map-day1 to map-day5)
+- [x] `web-app/index.html` — three-column layout: map | game | inventory + log
+- [x] `web-app/style.css` — pixel-art dark theme, viewport-fit layout (no scroll)
+- [x] `web-app/app.js` — UI rendering, event handling, audio system
+- [x] `web-app/game.js` — pure game state module (all logic, no DOM)
+- [x] `web-app/assets/` — background music per day (day1–4 + summit MP3)
+- [x] `web-app/images/` — trail photographs, day maps, pixel-art item icons, hiker sprites
 
 ### Features
 
-- Left panel: interactive map that switches image per day (Day 1–5), with trail nodes and an animated hiker character that changes appearance based on player condition
-- Right panel: scrollable gear & inventory grid
-- Trail board: horizontal node track showing visited/current/upcoming stations
-- Expedition log: timestamped event history with progress bar
+**Gameplay**
+- 26-node trail across 5 days; manage Stamina, Hunger, and Warmth simultaneously
+- Camp nodes are safe havens — no movement cost on arrival; Camp & Rest limited to once per camp
+- Danger zones drain −1 Stamina and −1 Warmth every second while standing on them
+- Icy terrain names trigger extra warmth drain; Crampons negate the stamina penalty
+- Deterministic surprise events per node; summit and camp nodes are exempt
+- Victory / defeat screens with animated modals and pixel confetti
+
+**UI**
+- Day-aware map panel with animated hiker sprite (changes with condition)
+- Terrain legend, next-location hint strip, trail board with node highlight
+- Gear & Inventory panel with hover tooltips; item pixel-art icons
+- Expedition log with cost-breakdown lines and progress bar
+- How-to-play tutorial modal (shown once, re-openable via 📖 button)
+
+**Audio**
+- Web Audio API sound effects: click, eat/consume, equip chime, danger drain, heartbeat
+- Web Speech API character complaints when any stat ≤ 30 %
+- Heartbeat vignette overlay (red/white fog) pulses with audio when stats critical
+- Background music per day (MP3), mutable via 🔊/🔇 toggle
 
 ### Finally
 - [x] Push to GitHub

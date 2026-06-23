@@ -10,6 +10,49 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <!-- Tutorial overlay (shown once on first visit) -->
+    <div id="tutorial-overlay" class="tutorial-overlay">
+        <div class="tutorial-modal">
+            <p class="tutorial-eyebrow">HIKING SURVIVAL</p>
+            <h2 class="tutorial-title">HOW TO PLAY</h2>
+
+            <div class="tutorial-grid">
+                <div class="tutorial-block">
+                    <p class="tutorial-block-label">🎯 OBJECTIVE</p>
+                    <p>Reach <strong>The Summit</strong> — Station 25 of 25, across 5 days of high-altitude trekking. One wrong move can end everything.</p>
+                </div>
+                <div class="tutorial-block">
+                    <p class="tutorial-block-label">💀 FAILURE</p>
+                    <p>If <strong>any</strong> of your three stats hits <strong>0%</strong>, the expedition ends. Manage all three — don't let one silently drain away.</p>
+                </div>
+                <div class="tutorial-block">
+                    <p class="tutorial-block-label">⚡ STAMINA · 🍖 HUNGER · 🔥 WARMTH</p>
+                    <p>Every action costs stats. Moving drains all three. Resting restores Stamina & Warmth but burns Hunger fast.</p>
+                </div>
+                <div class="tutorial-block">
+                    <p class="tutorial-block-label">🗺️ TERRAIN TYPES</p>
+                    <ul class="tutorial-terrain-list">
+                        <li><span class="tt-dot tt-safe"></span><strong>Safe / Normal</strong> — light drain</li>
+                        <li><span class="tt-dot tt-hard"></span><strong>Strenuous</strong> — heavy Stamina penalty</li>
+                        <li><span class="tt-dot tt-danger"></span><strong>Danger</strong> — severe Warmth drain</li>
+                        <li><span class="tt-dot tt-camp"></span><strong>Camp</strong> — partial recovery on arrival</li>
+                    </ul>
+                </div>
+                <div class="tutorial-block">
+                    <p class="tutorial-block-label">🎒 ITEMS</p>
+                    <p>Click any item in your backpack to use it immediately. <strong>Crampons</strong> equip permanently and reduce Stamina drain on icy terrain.</p>
+                </div>
+                <div class="tutorial-block">
+                    <p class="tutorial-block-label">⚠️ RANDOM EVENTS</p>
+                    <p>Every non-camp move triggers a random event — a boot slip, sudden windchill, or a detour. These cost extra stats on top of the base move cost.</p>
+                </div>
+            </div>
+
+            <button id="tutorial-close" class="tutorial-start-btn">BEGIN EXPEDITION →</button>
+        </div>
+    </div>
+
     <div class="layout-wrapper">
 
         <!-- Left: visual map panel -->
@@ -19,6 +62,18 @@
                 <!-- Map nodes and hiker character are generated and positioned by JS -->
                 <div class="map-character" id="map-character">
                     <img id="hiker-img" src="images/normalhiker.png" alt="hiker">
+                </div>
+            </div>
+            <!-- Map legend -->
+            <div class="map-legend">
+                <p class="map-legend-title">TERRAIN LEGEND</p>
+                <div class="legend-grid">
+                    <div class="legend-item"><span class="legend-dot ld-safe"></span>Safe</div>
+                    <div class="legend-item"><span class="legend-dot ld-normal"></span>Normal</div>
+                    <div class="legend-item"><span class="legend-dot ld-hard"></span>Strenuous</div>
+                    <div class="legend-item"><span class="legend-dot ld-danger"></span>Danger</div>
+                    <div class="legend-item"><span class="legend-dot ld-camp"></span>Camp</div>
+                    <div class="legend-item"><span class="legend-dot ld-summit"></span>Summit</div>
                 </div>
             </div>
         </aside>
@@ -32,6 +87,8 @@
                     <h1>High-Altitude Challenge</h1>
                 </div>
                 <p id="game-message">Welcome to the mountains! Plan your route.</p>
+                <button id="btn-guide" class="mute-btn" title="How to play">📖</button>
+                <button id="btn-mute" class="mute-btn" title="Toggle music">🔊</button>
             </header>
 
             <!-- Scene Card: current location as a large visual card -->
@@ -43,6 +100,14 @@
                     <p id="route-progress">Day 1 · Station 1 / 25</p>
                 </div>
             </section>
+
+            <!-- Next location hint -->
+            <div class="next-hint" id="next-hint">
+                <span class="next-hint-arrow">NEXT →</span>
+                <span class="next-hint-name" id="next-hint-name">—</span>
+                <span class="next-hint-badge" id="next-hint-badge"></span>
+                <span class="next-hint-remaining" id="next-hint-remaining"></span>
+            </div>
 
             <!-- Stats + Move/Camp Actions side by side -->
             <div class="mid-row">
@@ -84,7 +149,7 @@
                         <span class="btn-icon">🚶</span>
                         <div class="btn-text">
                             <strong>Move Forward</strong>
-                            <small>-5 Stamina · -4 Hunger · -4 Warmth</small>
+                            <small>-7 Stamina · -4 Hunger · -4 Warmth</small>
                         </div>
                     </button>
                     <button id="btn-camp" class="action-btn secondary">
@@ -114,7 +179,20 @@
                 <div id="trail-board" class="trail-board"></div>
             </section>
 
-            <!-- Event log -->
+        </main>
+
+        <!-- Right: Gear & Inventory + Expedition Log stacked -->
+        <div class="right-column">
+            <aside class="inventory-panel">
+                <p class="panel-title">GEAR &amp; INVENTORY</p>
+                <div id="inventory-list" class="item-grid"></div>
+                <!-- Item info strip: shows hovered item's effect -->
+                <div class="item-info-strip" id="item-info-strip">
+                    <span class="item-info-hint">Hover an item to see its effect</span>
+                </div>
+            </aside>
+
+            <!-- Event log below inventory -->
             <section class="log-section">
                 <div class="log-header">
                     <h3 class="section-label">EXPEDITION LOG</h3>
@@ -131,16 +209,49 @@
                     </ul>
                 </div>
             </section>
-
-        </main>
-
-        <!-- Right: Gear & Inventory panel -->
-        <aside class="inventory-panel">
-            <p class="panel-title">GEAR &amp; INVENTORY</p>
-            <div id="inventory-list" class="item-grid"></div>
-        </aside>
+        </div>
 
     </div><!-- .layout-wrapper -->
+
+    <!-- Heartbeat vignette overlay — shown when any stat is critically low -->
+    <div id="vignette-overlay" class="vignette-overlay"></div>
+
+    <!-- Victory / summit modal -->
+    <div id="summit-overlay" class="summit-overlay" style="display:none">
+        <canvas id="summit-canvas" class="summit-canvas"></canvas>
+        <div class="summit-modal">
+            <p class="summit-eyebrow">EXPEDITION COMPLETE</p>
+            <div class="summit-flag">🚩</div>
+            <h2 class="summit-title">SUMMIT<br>CONQUERED</h2>
+            <p class="summit-altitude">5,000 m · 5 Days · 25 Stations</p>
+            <div class="summit-stats">
+                <div class="summit-stat">
+                    <span class="summit-stat-val" id="summit-steps">—</span>
+                    <span class="summit-stat-label">NODES</span>
+                </div>
+                <div class="summit-stat">
+                    <span class="summit-stat-val" id="summit-items">—</span>
+                    <span class="summit-stat-label">ITEMS USED</span>
+                </div>
+                <div class="summit-stat">
+                    <span class="summit-stat-val" id="summit-stamina">—</span>
+                    <span class="summit-stat-label">STAMINA LEFT</span>
+                </div>
+            </div>
+            <button id="btn-play-again" class="summit-play-btn">▶ PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <!-- Game-over modal -->
+    <div id="gameover-overlay" class="gameover-overlay" style="display:none">
+        <div class="gameover-modal">
+            <p class="gameover-eyebrow">EXPEDITION FAILED</p>
+            <div class="gameover-skull">💀</div>
+            <h2 class="gameover-title">YOU DIDN'T<br>MAKE IT</h2>
+            <p class="gameover-sub" id="gameover-reason">The extreme environment has broken you.</p>
+            <button id="btn-retry" class="gameover-retry-btn">↺ RETRY</button>
+        </div>
+    </div>
 
     <script type="module" src="app.js"></script>
 </body>
